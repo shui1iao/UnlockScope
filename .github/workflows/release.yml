@@ -42,6 +42,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           set -euo pipefail
+          test "$(tr -d '\n' < VERSION)" = "$GITHUB_REF_NAME"
           version="${GITHUB_REF_NAME#v}"
           dir="unlockscope_${version}_${GOOS}_${GOARCH}"
           mkdir -p "$dir"
@@ -71,6 +72,7 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail

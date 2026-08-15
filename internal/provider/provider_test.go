@@ -74,7 +74,7 @@ func TestCheckCommonHTTPSignals(t *testing.T) {
 		{"available", "<html>watch now</html>", http.StatusOK, "html", model.Available},
 		{"ambiguous-200", "<html>hello</html>", http.StatusOK, "html", model.Unknown},
 		{"region", "not available in your country", http.StatusOK, "html", model.RegionOnly},
-		{"forbidden", "access denied", http.StatusForbidden, "html", model.Unavailable},
+		{"forbidden", "access denied", http.StatusForbidden, "html", model.Unknown},
 		{"forbidden-region", "country or region restriction", http.StatusForbidden, "html", model.RegionOnly},
 		{"rate-limit", "slow down", http.StatusTooManyRequests, "html", model.Unknown},
 		{"server-error", "oops", http.StatusBadGateway, "html", model.Failed},
@@ -153,6 +153,7 @@ func TestDetectRegionSignal(t *testing.T) {
 	for input, want := range map[string]string{
 		`{"countryCode":"jp"}`: "JP",
 		`window.region='US'`:   "US",
+		`{"region":"en"}`:      "",
 		`no regional signal`:   "",
 	} {
 		if got := detectRegion(input); got != want {

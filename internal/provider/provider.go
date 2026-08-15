@@ -83,10 +83,12 @@ func (p serviceProvider) Check(ctx context.Context, client *probe.Client, region
 		return result
 	}
 	if response.StatusCode == 403 || response.StatusCode == 451 {
-		result.State = model.Unavailable
-		result.Note = fmt.Sprintf("HTTP %d 表示访问被拒绝", response.StatusCode)
 		if containsAny(body, append(append([]string{}, p.def.RegionWords...), "country", "region", "territory", "geoblock")...) {
 			result.State, result.Note = model.RegionOnly, "服务返回地区限制信号"
+		} else if response.StatusCode == 451 {
+			result.State, result.Note = model.RegionOnly, "HTTP 451 表示地区或法律限制"
+		} else {
+			result.State, result.Note = model.Unknown, "HTTP 403，可能是 WAF、登录墙或地区限制，无法确定"
 		}
 		return result
 	}
@@ -131,18 +133,23 @@ func (p serviceProvider) Check(ctx context.Context, client *probe.Client, region
 }
 
 var regionPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)["'](?:country_?code|region|locale)["']\s*[:=]\s*["']([a-z]{2}(?:-[a-z]{2})?)["']`),
+	regexp.MustCompile(`(?i)["'](?:country_?code|region)["']\s*[:=]\s*["']([a-z]{2})["']`),
 	regexp.MustCompile(`(?i)\b(?:country_?code|region)\s*=\s*["']?([a-z]{2})\b`),
 }
 
 func detectRegion(body string) string {
 	for _, pattern := range regionPatterns {
 		if match := pattern.FindStringSubmatch(body); len(match) == 2 {
-			return strings.ToUpper(match[1])
+			country := strings.ToUpper(match[1])
+			if strings.Contains(validCountryCodes, "|"+country+"|") {
+				return country
+			}
 		}
 	}
 	return ""
 }
+
+const validCountryCodes = "|AD|AE|AF|AG|AI|AL|AM|AO|AQ|AR|AS|AT|AU|AW|AX|AZ|BA|BB|BD|BE|BF|BG|BH|BI|BJ|BL|BM|BN|BO|BQ|BR|BS|BT|BV|BW|BY|BZ|CA|CC|CD|CF|CG|CH|CI|CK|CL|CM|CN|CO|CR|CU|CV|CW|CX|CY|CZ|DE|DJ|DK|DM|DO|DZ|EC|EE|EG|EH|ER|ES|ET|FI|FJ|FK|FM|FO|FR|GA|GB|GD|GE|GF|GG|GH|GI|GL|GM|GN|GP|GQ|GR|GS|GT|GU|GW|GY|HK|HM|HN|HR|HT|HU|ID|IE|IL|IM|IN|IO|IQ|IR|IS|IT|JE|JM|JO|JP|KE|KG|KH|KI|KM|KN|KP|KR|KW|KY|KZ|LA|LB|LC|LI|LK|LR|LS|LT|LU|LV|LY|MA|MC|MD|ME|MF|MG|MH|MK|ML|MM|MN|MO|MP|MQ|MR|MS|MT|MU|MV|MW|MX|MY|MZ|NA|NC|NE|NF|NG|NI|NL|NO|NP|NR|NU|NZ|OM|PA|PE|PF|PG|PH|PK|PL|PM|PN|PR|PS|PT|PW|PY|QA|RE|RO|RS|RU|RW|SA|SB|SC|SD|SE|SG|SH|SI|SJ|SK|SL|SM|SN|SO|SR|SS|ST|SV|SX|SY|SZ|TC|TD|TF|TG|TH|TJ|TK|TL|TM|TN|TO|TR|TT|TV|TW|TZ|UA|UG|UM|US|UY|UZ|VA|VC|VE|VG|VI|VN|VU|WF|WS|YE|YT|ZA|ZM|ZW|"
 
 func containsAny(body string, words ...string) bool {
 	for _, word := range words {
@@ -156,7 +163,8 @@ func containsAny(body string, words ...string) bool {
 var commonRegionWords = []string{
 	"not available in your country", "not available in your region",
 	"not available in this location", "unavailable in your region",
-	"country or region", "geoblocked", "geo-blocked", "地域制限",
+	"not available in this country or region", "content is not available in your region",
+	"service is not available in your region", "geoblocked", "geo-blocked", "地域制限",
 	"该地区不可用", "此內容不適用", "此内容不可用",
 }
 var commonUnavailableWords = []string{
