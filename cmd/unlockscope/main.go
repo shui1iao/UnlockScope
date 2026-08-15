@@ -159,14 +159,20 @@ func writeJSON(w io.Writer, results []model.Result) error {
 }
 
 func writeText(w io.Writer, results []model.Result, plain bool) error {
-	fmt.Fprintln(w, "STATE        SERVICE                         REGION  TIME   NOTE")
-	fmt.Fprintln(w, "------------ ------------------------------- ------- ------ ------------------------------")
+	if _, err := fmt.Fprintln(w, "STATE        SERVICE                         REGION  TIME   NOTE"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "------------ ------------------------------- ------- ------ ------------------------------"); err != nil {
+		return err
+	}
 	for _, result := range results {
 		state := string(result.State)
 		if !plain {
 			state = colorState(result.State)
 		}
-		fmt.Fprintf(w, "%-12s %-31s %-7s %5dms %s\n", state, truncate(result.Service, 31), result.Region, result.DurationMS, result.Note)
+		if _, err := fmt.Fprintf(w, "%-12s %-31s %-7s %5dms %s\n", state, truncate(result.Service, 31), result.Region, result.DurationMS, result.Note); err != nil {
+			return err
+		}
 	}
 	return nil
 }

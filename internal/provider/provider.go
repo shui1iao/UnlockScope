@@ -122,11 +122,12 @@ func (p serviceProvider) Check(ctx context.Context, client *probe.Client, region
 		result.Note = "页面可访问，但没有足够信号确认内容解锁"
 		return result
 	}
-	if p.def.Kind == "json" {
+	switch p.def.Kind {
+	case "json":
 		result.Note = "公开 JSON 接口可访问；未模拟登录或购买"
-	} else if p.def.Kind == "edit" {
+	case "edit":
 		result.Note = "编辑页面可访问；未执行写入"
-	} else {
+	default:
 		result.Note = "公开页面可访问；结果为启发式判断"
 	}
 	return result

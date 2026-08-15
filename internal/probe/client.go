@@ -179,7 +179,7 @@ func (c *Client) Get(ctx context.Context, target string) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return Response{StatusCode: resp.StatusCode, URL: resp.Request.URL.String(), Header: resp.Header.Clone()}, err
@@ -226,13 +226,13 @@ func (c *Client) DetectRegion(ctx context.Context) (string, error) {
 }
 
 func socks5Dialer(base *net.Dialer, proxyAddr string, auth *url.Userinfo, family Family) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network, address string) (net.Conn, error) {
-		if family == IPv4 {
+	return func(ctx context.Context, _ string, address string) (net.Conn, error) {
+		network := "tcp"
+		switch family {
+		case IPv4:
 			network = "tcp4"
-		} else if family == IPv6 {
+		case IPv6:
 			network = "tcp6"
-		} else {
-			network = "tcp"
 		}
 		conn, err := base.DialContext(ctx, network, proxyAddr)
 		if err != nil {
