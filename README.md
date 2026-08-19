@@ -53,6 +53,8 @@ UNLOCKSCOPE_VERSION=v0.1.0 bash install.sh
 - `failed`：网络错误、单项/全局超时或服务端 5xx。
 - `unknown`：登录墙、限流、动态响应、非稳定 JSON 等无法可靠判定的情况。
 
+默认终端输出按英文分类标题分组；状态使用中文，地区代码统一大写并放在中文括号中，例如 `可用（JP）`。`unavailable` 只显示“不可用”，不附带地区。`--json` 的稳定字段和值保持不变。
+
 JSON 是数组，每项的稳定字段为 `id`、`service`、`category`、`regions`、`state`、`region`、`note`、`duration_ms`、`checked_at`。消费者应依赖 `state`，不要依赖可变化的 `note`：
 
 ```json

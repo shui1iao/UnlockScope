@@ -17,7 +17,7 @@ import (
 	"github.com/shui1iao/UnlockScope/internal/provider"
 )
 
-var version = "v0.1.0"
+var version = "v0.1.1"
 
 type stringList []string
 
@@ -158,23 +158,78 @@ func writeJSON(w io.Writer, results []model.Result) error {
 	return enc.Encode(results)
 }
 
+var textCategoryLabels = map[string]string{
+	"streaming": "Streaming",
+	"ai":        "AI",
+	"social":    "Social",
+	"knowledge": "Knowledge & Community",
+	"games":     "Games / Stores",
+	"sports":    "Sports",
+}
+
 func writeText(w io.Writer, results []model.Result, plain bool) error {
-	if _, err := fmt.Fprintln(w, "STATE        SERVICE                         REGION  TIME   NOTE"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(w, "------------ ------------------------------- ------- ------ ------------------------------"); err != nil {
-		return err
-	}
+	categoryOrder := make([]string, 0)
+	grouped := make(map[string][]model.Result)
 	for _, result := range results {
-		state := string(result.State)
-		if !plain {
-			state = colorState(result.State)
+		category := strings.ToLower(strings.TrimSpace(result.Category))
+		if _, ok := grouped[category]; !ok {
+			categoryOrder = append(categoryOrder, category)
 		}
-		if _, err := fmt.Fprintf(w, "%-12s %-31s %-7s %5dms %s\n", state, truncate(result.Service, 31), result.Region, result.DurationMS, result.Note); err != nil {
+		grouped[category] = append(grouped[category], result)
+	}
+
+	for index, category := range categoryOrder {
+		if index > 0 {
+			if _, err := fmt.Fprintln(w); err != nil {
+				return err
+			}
+		}
+		title := textCategoryLabels[category]
+		if title == "" {
+			title = category
+		}
+		if _, err := fmt.Fprintf(w, "====================[ %s ]====================\n", title); err != nil {
 			return err
+		}
+		for _, result := range grouped[category] {
+			state := textStateLabel(result.State, result.Region)
+			if !plain {
+				state = colorStateText(result.State, state)
+			}
+			service := truncate(strings.TrimSuffix(result.Service, ":"), 30) + ":"
+			if _, err := fmt.Fprintf(w, "%-31s %s  %5dms", service, state, result.DurationMS); err != nil {
+				return err
+			}
+			if strings.TrimSpace(result.Note) != "" {
+				if _, err := fmt.Fprintf(w, "  %s", result.Note); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintln(w); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func textStateLabel(state model.State, region string) string {
+	labels := map[model.State]string{
+		model.Available:   "可用",
+		model.Unavailable: "不可用",
+		model.RegionOnly:  "仅地区可用",
+		model.Failed:      "检测失败",
+		model.Unknown:     "未知",
+	}
+	label := labels[state]
+	if label == "" {
+		label = string(state)
+	}
+	region = strings.ToUpper(strings.TrimSpace(region))
+	if region != "" && state != model.Unavailable {
+		return fmt.Sprintf("%s（%s）", label, region)
+	}
+	return label
 }
 
 func printProviders(w io.Writer, providers []provider.Provider) error {
@@ -189,13 +244,13 @@ func printProviders(w io.Writer, providers []provider.Provider) error {
 	return nil
 }
 
-func colorState(state model.State) string {
+func colorStateText(state model.State, text string) string {
 	const reset = "\033[0m"
 	colors := map[model.State]string{model.Available: "\033[32m", model.Unavailable: "\033[31m", model.RegionOnly: "\033[33m", model.Failed: "\033[35m", model.Unknown: "\033[36m"}
 	if color, ok := colors[state]; ok {
-		return color + string(state) + reset
+		return color + text + reset
 	}
-	return string(state)
+	return text
 }
 func truncate(value string, max int) string {
 	if len(value) <= max {

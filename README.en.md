@@ -53,6 +53,8 @@ UNLOCKSCOPE_VERSION=v0.1.0 PREFIX="$HOME/.local/bin" bash install.sh
 - `failed`: network error, per-item/global timeout, or server-side 5xx.
 - `unknown`: login wall, rate limit, dynamic response, unstable JSON, or another ambiguous outcome.
 
+The default terminal output is grouped under English category headings. Human-readable states use Chinese labels, uppercase region codes, and full-width parentheses, for example `可用（JP）`; `unavailable` is shown without a region. The stable `--json` fields and values are unchanged.
+
 JSON is an array. Each item has the stable fields `id`, `service`, `category`, `regions`, `state`, `region`, `note`, `duration_ms`, and `checked_at`. Consumers should depend on `state`, not on the human-readable `note`:
 
 ```json

@@ -14,7 +14,7 @@ func TestCLIValidationAndVersion(t *testing.T) {
 	if err := run([]string{"--version"}, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(out.String()) != "v0.1.0" {
+	if strings.TrimSpace(out.String()) != "v0.1.1" {
 		t.Fatalf("version output = %q", out.String())
 	}
 	out.Reset()
@@ -46,6 +46,39 @@ func TestJSONSchemaFields(t *testing.T) {
 	for _, key := range []string{"id", "service", "category", "regions", "state", "region", "note", "duration_ms", "checked_at"} {
 		if _, ok := decoded[0][key]; !ok {
 			t.Errorf("JSON missing %q", key)
+		}
+	}
+}
+
+func TestTextOutputUsesEnglishCategoriesAndUppercaseRegions(t *testing.T) {
+	input := []model.Result{
+		{Service: "Netflix", Category: "streaming", State: model.Available, Region: "jp", Note: "ok", DurationMS: 4},
+		{Service: "Disney+", Category: "streaming", State: model.Unavailable, Region: "kr", DurationMS: 5},
+		{Service: "Claude", Category: "ai", State: model.Unknown, DurationMS: 6},
+		{Service: "Steam Store", Category: "games", State: model.RegionOnly, Region: "us", DurationMS: 7},
+	}
+	var buf bytes.Buffer
+	if err := writeText(&buf, input, true); err != nil {
+		t.Fatal(err)
+	}
+	output := buf.String()
+	for _, want := range []string{
+		"[ Streaming ]",
+		"[ AI ]",
+		"[ Games / Stores ]",
+		"Netflix:",
+		"可用（JP）",
+		"不可用",
+		"未知",
+		"仅地区可用（US）",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("text output missing %q:\n%s", want, output)
+		}
+	}
+	for _, unwanted := range []string{"[ 流媒体 ]", "可用 (JP)", "不可用（KR）", "（jp）", "（us）", "\x1b["} {
+		if strings.Contains(output, unwanted) {
+			t.Errorf("text output contains %q:\n%s", unwanted, output)
 		}
 	}
 }
