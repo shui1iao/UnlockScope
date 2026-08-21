@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -112,9 +111,9 @@ func (p serviceProvider) Check(ctx context.Context, client *probe.Client, region
 		result.State, result.Note = model.Unknown, "页面要求登录或使用动态脚本，无法确定"
 		return result
 	}
-	if detected := detectRegion(body); detected != "" {
-		result.Region = detected
-	}
+	// Region is the egress/selected scope supplied by the caller. Provider pages
+	// often contain unrelated locale metadata such as region=af; never let
+	// untrusted response HTML overwrite the actual egress region.
 	if containsAny(body, p.def.AvailableWords...) || p.def.PassStatusOnly || validJSON {
 		result.State = model.Available
 	} else {
@@ -132,25 +131,6 @@ func (p serviceProvider) Check(ctx context.Context, client *probe.Client, region
 	}
 	return result
 }
-
-var regionPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)["'](?:country_?code|region)["']\s*[:=]\s*["']([a-z]{2})["']`),
-	regexp.MustCompile(`(?i)\b(?:country_?code|region)\s*=\s*["']?([a-z]{2})\b`),
-}
-
-func detectRegion(body string) string {
-	for _, pattern := range regionPatterns {
-		if match := pattern.FindStringSubmatch(body); len(match) == 2 {
-			country := strings.ToUpper(match[1])
-			if strings.Contains(validCountryCodes, "|"+country+"|") {
-				return country
-			}
-		}
-	}
-	return ""
-}
-
-const validCountryCodes = "|AD|AE|AF|AG|AI|AL|AM|AO|AQ|AR|AS|AT|AU|AW|AX|AZ|BA|BB|BD|BE|BF|BG|BH|BI|BJ|BL|BM|BN|BO|BQ|BR|BS|BT|BV|BW|BY|BZ|CA|CC|CD|CF|CG|CH|CI|CK|CL|CM|CN|CO|CR|CU|CV|CW|CX|CY|CZ|DE|DJ|DK|DM|DO|DZ|EC|EE|EG|EH|ER|ES|ET|FI|FJ|FK|FM|FO|FR|GA|GB|GD|GE|GF|GG|GH|GI|GL|GM|GN|GP|GQ|GR|GS|GT|GU|GW|GY|HK|HM|HN|HR|HT|HU|ID|IE|IL|IM|IN|IO|IQ|IR|IS|IT|JE|JM|JO|JP|KE|KG|KH|KI|KM|KN|KP|KR|KW|KY|KZ|LA|LB|LC|LI|LK|LR|LS|LT|LU|LV|LY|MA|MC|MD|ME|MF|MG|MH|MK|ML|MM|MN|MO|MP|MQ|MR|MS|MT|MU|MV|MW|MX|MY|MZ|NA|NC|NE|NF|NG|NI|NL|NO|NP|NR|NU|NZ|OM|PA|PE|PF|PG|PH|PK|PL|PM|PN|PR|PS|PT|PW|PY|QA|RE|RO|RS|RU|RW|SA|SB|SC|SD|SE|SG|SH|SI|SJ|SK|SL|SM|SN|SO|SR|SS|ST|SV|SX|SY|SZ|TC|TD|TF|TG|TH|TJ|TK|TL|TM|TN|TO|TR|TT|TV|TW|TZ|UA|UG|UM|US|UY|UZ|VA|VC|VE|VG|VI|VN|VU|WF|WS|YE|YT|ZA|ZM|ZW|"
 
 func containsAny(body string, words ...string) bool {
 	for _, word := range words {

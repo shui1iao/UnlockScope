@@ -149,15 +149,25 @@ func TestAmbiguousSuccessStaysUnknown(t *testing.T) {
 	}
 }
 
-func TestDetectRegionSignal(t *testing.T) {
-	for input, want := range map[string]string{
-		`{"countryCode":"jp"}`: "JP",
-		`window.region='US'`:   "US",
-		`{"region":"en"}`:      "",
-		`no regional signal`:   "",
-	} {
-		if got := detectRegion(input); got != want {
-			t.Errorf("detectRegion(%q) = %q, want %q", input, got, want)
-		}
+func TestCheckPreservesSelectedRegionWhenPageContainsUntrustedRegionMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<script>window.region='AF'</script> watch now"))
+	}))
+	defer server.Close()
+
+	client, err := probe.New(probe.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := serviceProvider{def: Definition{
+		ID:             "untrusted-region",
+		Service:        "Untrusted region",
+		URL:            server.URL,
+		Kind:           "html",
+		AvailableWords: []string{"watch now"},
+	}}
+	result := item.Check(context.Background(), client, "na")
+	if result.Region != "na" {
+		t.Fatalf("region = %q, want selected egress region %q", result.Region, "na")
 	}
 }

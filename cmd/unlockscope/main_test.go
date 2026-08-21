@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shui1iao/UnlockScope/internal/model"
+	"github.com/shui1iao/UnlockScope/internal/probe"
+	"github.com/shui1iao/UnlockScope/internal/provider"
 )
 
 func TestCLIValidationAndVersion(t *testing.T) {
@@ -14,7 +18,7 @@ func TestCLIValidationAndVersion(t *testing.T) {
 	if err := run([]string{"--version"}, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(out.String()) != "v0.1.1" {
+	if strings.TrimSpace(out.String()) != "v0.1.2" {
 		t.Fatalf("version output = %q", out.String())
 	}
 	out.Reset()
@@ -34,7 +38,7 @@ func TestCLIValidationAndVersion(t *testing.T) {
 }
 
 func TestJSONSchemaFields(t *testing.T) {
-	input := []model.Result{{ID: "demo", Service: "Demo", Category: "streaming", Regions: []string{"hk"}, State: model.Available, Region: "hk", Note: "ok", DurationMS: 4}}
+	input := []model.Result{{ID: "demo", Service: "Demo", Category: "streaming", Regions: []string{"hk"}, State: model.Available, Country: "US", Region: "hk", Note: "ok", DurationMS: 4}}
 	var buf bytes.Buffer
 	if err := writeJSON(&buf, input); err != nil {
 		t.Fatal(err)
@@ -43,7 +47,7 @@ func TestJSONSchemaFields(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"id", "service", "category", "regions", "state", "region", "note", "duration_ms", "checked_at"} {
+	for _, key := range []string{"id", "service", "category", "regions", "state", "country", "region", "note", "duration_ms", "checked_at"} {
 		if _, ok := decoded[0][key]; !ok {
 			t.Errorf("JSON missing %q", key)
 		}
@@ -83,8 +87,33 @@ func TestTextOutputUsesEnglishCategoriesAndUppercaseRegions(t *testing.T) {
 	}
 }
 
+type countryTestProvider struct{}
+
+func (countryTestProvider) Definition() provider.Definition {
+	return provider.Definition{ID: "country-test", Service: "Country Test", Category: "streaming"}
+}
+
+func (countryTestProvider) Check(context.Context, *probe.Client, string) model.Result {
+	return model.Result{ID: "country-test", Service: "Country Test", Category: "streaming", State: model.Available}
+}
+
+func TestCheckAllPropagatesRuntimeCountry(t *testing.T) {
+	results := checkAll(
+		context.Background(),
+		nil,
+		[]provider.Provider{countryTestProvider{}},
+		"na",
+		"US",
+		time.Second,
+		1,
+	)
+	if len(results) != 1 || results[0].Country != "US" {
+		t.Fatalf("results = %+v, want runtime country US", results)
+	}
+}
+
 func TestNormalizeRegion(t *testing.T) {
-	cases := map[string]string{"HK": "hk", "us": "na", "AU": "oc", "de": "eu", "eu": "eu", "": ""}
+	cases := map[string]string{"HK": "hk", "us": "na", "AU": "oc", "de": "eu", "eu": "eu", "na": "na", "": ""}
 	for input, want := range cases {
 		if got := normalizeRegion(input); got != want {
 			t.Errorf("normalizeRegion(%q) = %q, want %q", input, got, want)

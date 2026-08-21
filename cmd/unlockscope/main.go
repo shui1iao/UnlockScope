@@ -17,7 +17,7 @@ import (
 	"github.com/shui1iao/UnlockScope/internal/provider"
 )
 
-var version = "v0.1.1"
+var version = "v0.1.2"
 
 type stringList []string
 
@@ -99,11 +99,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	actualRegion := normalizeRegion(*region)
+	actualCountry := ""
 	if actualRegion == "" && strings.EqualFold(strings.TrimSpace(*scope), "auto") {
 		geoCtx, cancel := context.WithTimeout(context.Background(), minDuration(*perTimeout, 3*time.Second))
-		actualCountry, geoErr := client.DetectRegion(geoCtx)
+		actualCountryRaw, geoErr := client.DetectRegion(geoCtx)
 		cancel()
 		if geoErr == nil {
+			actualCountry = normalizeCountry(actualCountryRaw)
 			actualRegion = normalizeRegion(actualCountry)
 		}
 	}
@@ -116,14 +118,14 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *totalTimeout)
 	defer cancel()
-	results := checkAll(ctx, client, chosen, actualRegion, *perTimeout, *concurrency)
+	results := checkAll(ctx, client, chosen, actualRegion, actualCountry, *perTimeout, *concurrency)
 	if *jsonOutput {
 		return writeJSON(stdout, results)
 	}
 	return writeText(stdout, results, *noColor || *plain)
 }
 
-func checkAll(ctx context.Context, client *probe.Client, providers []provider.Provider, region string, timeout time.Duration, concurrency int) []model.Result {
+func checkAll(ctx context.Context, client *probe.Client, providers []provider.Provider, region, country string, timeout time.Duration, concurrency int) []model.Result {
 	results := make([]model.Result, len(providers))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -134,12 +136,14 @@ func checkAll(ctx context.Context, client *probe.Client, providers []provider.Pr
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
-				results[index] = cancelledResult(p, region)
+				results[index] = cancelledResult(p, region, country)
 				return
 			}
 			defer func() { <-sem }()
 			itemCtx, cancel := context.WithTimeout(ctx, timeout)
-			results[index] = p.Check(itemCtx, client, region)
+			result := p.Check(itemCtx, client, region)
+			result.Country = country
+			results[index] = result
 			cancel()
 		}(i, p)
 	}
@@ -147,9 +151,9 @@ func checkAll(ctx context.Context, client *probe.Client, providers []provider.Pr
 	return results
 }
 
-func cancelledResult(p provider.Provider, region string) model.Result {
+func cancelledResult(p provider.Provider, region, country string) model.Result {
 	d := p.Definition()
-	return model.Result{ID: d.ID, Service: d.Service, Category: d.Category, Regions: append([]string{}, d.Regions...), Region: region, State: model.Failed, Note: "全局超时，未开始请求", CheckedAt: time.Now()}
+	return model.Result{ID: d.ID, Service: d.Service, Category: d.Category, Regions: append([]string{}, d.Regions...), Country: country, Region: region, State: model.Failed, Note: "全局超时，未开始请求", CheckedAt: time.Now()}
 }
 
 func writeJSON(w io.Writer, results []model.Result) error {
@@ -278,8 +282,26 @@ func parseFamily(value string) (probe.Family, error) {
 	}
 }
 
+func normalizeCountry(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if len(value) != 2 {
+		return ""
+	}
+	for _, ch := range value {
+		if ch < 'A' || ch > 'Z' {
+			return ""
+		}
+	}
+	return value
+}
+
 func normalizeRegion(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
+	// Region-group aliases take precedence over ISO country codes. In
+	// particular, "na" means North America here, while NA is also Namibia.
+	if validRegion(value) {
+		return value
+	}
 	if len(value) == 2 {
 		switch value {
 		case "hk", "tw", "jp", "kr":
@@ -295,9 +317,6 @@ func normalizeRegion(value string) string {
 		case "gb", "ie", "fr", "de", "nl", "be", "lu", "es", "pt", "it", "ch", "at", "pl", "cz", "sk", "hu", "ro", "bg", "gr", "cy", "mt", "dk", "se", "no", "fi", "is", "ee", "lv", "lt", "si", "hr", "rs", "ba", "me", "mk", "al", "md", "ua":
 			return "eu"
 		}
-	}
-	if validRegion(value) {
-		return value
 	}
 	return ""
 }

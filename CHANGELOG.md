@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.1.2] - 2026-08-21
+
+- Add a runtime `country` field sourced from the checking node's egress lookup.
+- Keep region-group selection separate from ISO country codes.
+- Stop treating arbitrary provider-page locale metadata as a detected region.
+- Preserve unknown when the runtime country cannot be determined.
+
 ## [v0.1.1] - 2026-08-19
 
 - Grouped terminal results under English category headings while preserving first-seen category order.

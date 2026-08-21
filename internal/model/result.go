@@ -22,6 +22,7 @@ type Result struct {
 	Category   string    `json:"category"`
 	Regions    []string  `json:"regions"`
 	State      State     `json:"state"`
+	Country    string    `json:"country,omitempty"`
 	Region     string    `json:"region,omitempty"`
 	Note       string    `json:"note,omitempty"`
 	DurationMS int64     `json:"duration_ms"`
